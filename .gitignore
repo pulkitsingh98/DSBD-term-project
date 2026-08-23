@@ -1,0 +1,12 @@
+# Trained artefacts (~54 MB) - regenerate in ~15 s with `python train_models.py`
+models/*
+!models/.gitkeep
+
+# Charting library, copied out of the installed plotly package on first run
+static/vendor/plotly.min.js
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store

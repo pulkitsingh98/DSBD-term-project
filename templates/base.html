@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Freight Damage Claims Analytics{% endblock %}</title>
+  <!-- Inter if the machine is online; the CSS falls back to the system UI stack
+       otherwise. Loaded non-blocking so an offline projector still paints instantly. -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128666;</text></svg>">
+</head>
+<body>
+  <div id="loading" class="loading"><span class="spinner"></span> Loading trained models…</div>
+
+  {% block content %}{% endblock %}
+
+  <script src="{{ url_for('static', filename='vendor/plotly.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/presentation.js') }}"></script>
+</body>
+</html>
