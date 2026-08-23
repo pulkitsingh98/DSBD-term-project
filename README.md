@@ -3,8 +3,8 @@
 **Predicting Risk. Estimating Loss. Improving Decisions.**
 
 An interactive analytics presentation, built as a Flask application, over 25,000
-Indian freight shipments (Jan 2023 – Dec 2025). Eleven landscape slides move from
-the business problem to an operating decision rule, and every number on every
+Indian freight shipments (Jan 2023 – Dec 2025). Twelve landscape slides move from
+the business problem to a costed operating decision, and every number on every
 slide is computed by a trained model — nothing is hardcoded, mocked, or
 illustrative.
 
@@ -21,7 +21,16 @@ starting the server is instant and the numbers never shift between runs.
 `models/` is gitignored (≈54 MB), so run `train_models.py` once after cloning.
 
 Navigate with **← / →**, **Home**, **End**, the page numbers, or the Previous /
-Next buttons. The deck is designed for a 16:9 projector and never scrolls.
+Next buttons. The deck is designed for a 16:9 projector and never scrolls; it was
+checked at 1280×720, 1366×768, 1600×900 and 1920×1080 in both themes.
+
+The nav bar carries three presenter controls: **A− / A+** adjusts type size and
+**Dark / Light** switches theme, both remembered per browser. The scale caps at
++5% — the base size is already tuned to fill the slide, and slides are packed to
+one viewport by design, so there is little room above it; the control is mostly a
+fine adjustment and a way *down* on cramped screens. The chip beside "Previous"
+names the shipment that slides 5, 9, 11 and 12 are all scoring.
+
 Plotly is served from `static/vendor/`, copied out of the installed `plotly`
 package on first start, so the presentation works with no internet connection.
 
@@ -32,14 +41,15 @@ package on first start, so the presentation works with no internet connection.
 | 1 | Problem statement | — |
 | 2 | Data → business variables | — |
 | 3 | Exploratory analysis | Variable dropdowns redraw two charts and regenerate the observations |
-| 4 | Lane risk archetypes | K slider (2–6) re-clusters, retitles and rescores |
+| 4 | Lane risk archetypes | K slider (2–6) re-clusters, renames, rescores; centroids and a 9-feature profile heatmap |
 | 5 | Claim probability | 17 shipment controls re-score three classifiers live |
 | 6 | Threshold simulator | Threshold slider moves the operating point on fixed ROC / PR curves |
-| 7 | Why the threshold matters | Same threshold, framed as an inspection-cost trade-off |
-| 8 | Claim value | Model toggle; expected loss for the current shipment |
-| 9 | Model comparison | Logistic vs Random Forest vs Bagging on identical features |
-| 10 | Risk drivers + what-if | Importance source toggle; what-if levers vs the current shipment |
-| 11 | Business decision | Three recommendations regenerated from the live scenario |
+| 7 | Why the threshold matters | Three-column comparison anchored on the current threshold |
+| 8 | **Cost of a threshold** | Intervention cost and prevention sliders find the cheapest threshold |
+| 9 | Claim value | Model toggle; expected loss for the current shipment |
+| 10 | Model comparison | Logistic vs Random Forest vs Bagging on identical features |
+| 11 | Risk drivers + what-if | Importance source toggle; what-if levers vs the current shipment |
+| 12 | Business decision | Three recommendations regenerated from the live scenario |
 
 ## The models
 
@@ -51,11 +61,19 @@ comparison on slide 9 is fair.
 | Logistic Regression | Claim probability, interpretable | ROC-AUC 0.706 · PR-AUC 0.306 |
 | Random Forest | Claim probability, non-linear | ROC-AUC 0.699 · PR-AUC 0.298 |
 | Bagging (decision trees) | Claim probability, variance reduction | ROC-AUC 0.701 · PR-AUC 0.301 |
-| Linear Regression | Claim value, given a claim | MAE ₹13,378 · RMSE ₹29,015 · R² 0.172 |
-| Random Forest Regressor | Claim value benchmark | MAE ₹12,265 · RMSE ₹27,960 · R² 0.231 |
+| Linear Regression | Claim value, given a claim | MAE ₹15,144 · RMSE ₹41,260 · R² 0.109 |
+| Random Forest Regressor | Claim value benchmark | MAE ₹13,738 · RMSE ₹40,025 · R² 0.162 |
 | K-Means | Lane risk archetypes | 210 lanes, K chosen by elbow (K=4) and silhouette |
 
 Held out 25% of rows (6,250 shipments) with stratification, `random_state=42`.
+
+The claim-value split is **nested inside** the classifier's: those models are fitted
+only on claims that fall in the classifier's training set and scored on claims in
+its test set. Drawing a fresh split across all claims would score the value model
+fine on its own, but it would leave 716 of the classifier's 934 test claims (77%)
+inside the value model's training data — and slide 8 combines both models over
+exactly that test set. Nesting costs some headline accuracy (R² 0.231 → 0.162) and
+buys a cost analysis that is not quietly marking its own homework.
 
 Three findings worth stating plainly rather than dressing up:
 
@@ -67,10 +85,17 @@ Three findings worth stating plainly rather than dressing up:
   catches 2.9% of claims.** That is what a 14.9% base rate does to a default
   cut-off, and it is the entire point of slides 6 and 7. The F1-optimal
   threshold is 0.15.
-- **Claim value is only moderately predictable (R² 0.231).** How much a claim
+- **Claim value is only moderately predictable (R² 0.162).** How much a claim
   costs depends heavily on how badly the goods were damaged, and severity is a
   post-event variable the leakage rule forbids. A moderate R² is the expected
   result here, not a modelling failure.
+- **At the default intervention cost, the conventional 0.50 threshold is worse
+  than doing nothing** — it spends ₹2,281 each on 53 shipments to prevent less
+  than that in damage. Slide 8 shows the loss in rupees.
+- **Ranking by expected loss beats any single probability threshold**, by 8.7% at
+  the default assumptions and up to 15% when intervention is cheap. A 10% chance
+  of a ₹1,00,000 claim deserves more attention than a 30% chance of a ₹2,000 one,
+  and a probability cut-off cannot express that.
 
 ## Leakage control
 
@@ -135,8 +160,31 @@ models/                 saved pipelines + artifacts.json (generated)
 | `GET /api/eda?category=&numeric=` | One breakdown, one relationship, with generated observations |
 | `POST /api/predict` | Three classifiers, two regressors, expected loss, lane context |
 | `POST /api/whatif` | Baseline vs modified scenario and the model-implied delta |
+| `GET /api/cost-benefit?cost=&effectiveness=&threshold=` | Cost curve, cheapest threshold, closed-form t\*, expected-loss rule |
 | `POST /api/decision` | Three ranked recommendations and a takeaway |
 | `GET /api/health` | Loaded models and training timestamp |
+
+## Costing a threshold
+
+Slide 8 asks what each threshold would have cost over the held-out set, using
+what those shipments **actually** cost:
+
+```
+Cost(t) = C × (shipments flagged)
+        + (missed claims: full realised amount)
+        + (caught claims: realised amount × (1 − ε))
+```
+
+`C` is what acting on a flagged shipment costs and `ε` is the share of damage that
+acting prevents. Neither is in the dataset — both are sliders, labelled on screen
+as assumptions. `C` defaults to ₹2,281, which is the loss this book already carries
+per shipment (₹1,42,58,905 over 6,250); `ε` defaults to 60% and has no anchor in
+the data at all.
+
+The slide also shows the textbook answer next to the backtest: act when
+`ε × p × L > C`, so `t* = C / (ε × L)`. At C = ₹2,500 and ε = 60% the formula gives
+0.273 and the empirical minimum is 0.28 — the agreement is the reassurance that
+neither is a fluke.
 
 ## Two design notes
 
@@ -144,6 +192,12 @@ models/                 saved pipelines + artifacts.json (generated)
 its own standardised profile — claim frequency, claim size, operating
 difficulty, volume — so the labels describe whatever the algorithm actually
 found at that K. Changing K changes the names.
+
+**The lane scatter shows 2 of the 9 features K-Means clustered on**, which is why
+the colours intermingle. Rather than leave that looking like a failure, the ✕
+markers give each fitted centroid in original units and the heatmap underneath
+shows all nine features as standard deviations from the average lane — so the
+overlap has an explanation on the slide instead of in the presenter's head.
 
 **"Model-implied" is not "causal".** The what-if page and the lever
 recommendation on the final slide report what the fitted models predict if an

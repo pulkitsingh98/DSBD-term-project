@@ -87,7 +87,7 @@
     <div class="slide-body">
       <div class="grid g-60-40 fill">
         <div style="display:flex;flex-direction:column;gap:.9rem;min-height:0">
-          <div class="grid g-3" style="flex:1 1 auto;align-content:center" id="var-cards"></div>
+          <div class="grid g-3" style="flex:1 1 auto;min-height:0;align-content:center;overflow:hidden" id="var-cards"></div>
           <div class="card tight">
             <div class="flow" style="justify-content:space-between">
               <span class="flow-step">Shipment characteristics</span><span class="flow-arrow">→</span>
@@ -182,14 +182,23 @@
 
     <div class="slide-body">
       <div class="grid g-60-40 fill">
-        <div class="card flush">
-          <p class="card-title" style="padding:0 .3rem">Lane risk archetypes
-            <span class="muted" id="cluster-axes">claim rate × average claim value</span></p>
-          <div id="chart-clusters" class="chart"></div>
+        <div style="display:flex;flex-direction:column;gap:.7rem;min-height:0">
+          <div class="card flush" style="flex:2.1 1 0;min-height:0">
+            <p class="card-title" style="padding:0 .3rem">Lane risk archetypes
+              <span class="muted" id="cluster-axes">✕ marks each cluster centre · dot size = shipment volume</span></p>
+            <div id="chart-clusters" class="chart"></div>
+          </div>
+          <div class="card flush" style="flex:1 1 0;min-height:6rem">
+            <p class="card-title" style="padding:0 .3rem">
+              <span>What separates the clusters
+                <span class="gloss">all 9 clustering features, in SDs from the average lane</span></span>
+            </p>
+            <div id="chart-cluster-profile" class="chart"></div>
+          </div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:.7rem;min-height:0">
-          <div class="card tight">
+          <div class="card tight" style="flex:0 0 auto">
             <div class="control">
               <label for="k-slider">Number of clusters K</label>
               <output id="k-out">4</output>
@@ -197,9 +206,11 @@
             <input type="range" id="k-slider" min="2" max="6" step="1" value="4">
             <div class="grid g-3" style="gap:.5rem;margin-top:.35rem">
               <div class="stat"><span class="stat-value sm" id="k-sil">–</span>
-                <span class="stat-label">Silhouette</span></div>
+                <span class="stat-label">Silhouette
+                  <span class="gloss">separation</span></span></div>
               <div class="stat"><span class="stat-value sm" id="k-inertia">–</span>
-                <span class="stat-label">Inertia</span></div>
+                <span class="stat-label">Inertia
+                  <span class="gloss">tightness</span></span></div>
               <div class="stat"><span class="stat-value sm" id="k-lanes">–</span>
                 <span class="stat-label">Lanes clustered</span></div>
             </div>
@@ -217,13 +228,14 @@
             </div>
           </div>
 
-          <div class="card tight" style="flex:1 1 auto;min-height:0">
+          <div class="card tight" style="flex:1 1 auto;min-height:4.5rem">
             <p class="card-title">What does this mean?</p>
-            <p class="card-note" id="cluster-interp" style="margin:0 0 .5rem;font-size:.82rem"></p>
-            <div class="scroll" id="cluster-examples"></div>
+            <div class="scroll">
+              <p class="card-note" id="cluster-interp" style="margin:0;font-size:.84rem"></p>
+            </div>
           </div>
 
-          <div class="card flush" style="flex:0 0 10.5rem">
+          <div class="card flush" style="flex:0 1 10.5rem;min-height:6rem">
             <p class="card-title" style="padding:0 .3rem">Choosing K
               <span class="muted" id="k-choice-note"></span></p>
             <div id="chart-elbow" class="chart"></div>
@@ -318,13 +330,13 @@
           <label for="thr-slider">Classify as <strong>high risk</strong> when predicted probability ≥</label>
           <output id="thr-out" style="font-size:1.5rem">0.50</output>
         </div>
-        <input type="range" class="big" id="thr-slider" min="0.05" max="0.90" step="0.01" value="0.50">
+        <input type="range" class="big" id="thr-slider" min="0.01" max="0.95" step="0.01" value="0.50">
         <div style="display:flex;justify-content:space-between;align-items:center;
                     font-size:.74rem;color:var(--ink-faint);gap:1rem">
-          <span>0.05 · flag almost everything</span>
+          <span>0.01 · flag almost everything</span>
           <span id="thr-flagged">–</span>
           <button class="btn" id="thr-best" type="button">Jump to best F1</button>
-          <span>0.90 · flag almost nothing</span>
+          <span>0.95 · flag almost nothing</span>
         </div>
       </div>
 
@@ -353,8 +365,12 @@
             <div class="kv"><span>F1 score</span><span id="m-f1">–</span></div>
             <div class="kv"><span>Accuracy</span><span id="m-acc">–</span></div>
             <div class="kv" style="border-top:1px solid var(--line);padding-top:.35rem">
-              <span>ROC-AUC <span class="stat-sub">(fixed)</span></span><span id="m-auc">–</span></div>
-            <div class="kv"><span>PR-AUC <span class="stat-sub">(fixed)</span></span><span id="m-prauc">–</span></div>
+              <span>ROC-AUC <span class="stat-sub">(fixed)</span>
+                <span class="gloss">ranking quality, all thresholds</span></span>
+              <span id="m-auc">–</span></div>
+            <div class="kv"><span>PR-AUC <span class="stat-sub">(fixed)</span>
+                <span class="gloss">how well it finds the rare claims</span></span>
+              <span id="m-prauc">–</span></div>
           </div>
         </div>
 
@@ -378,56 +394,44 @@
     <header class="slide-head">
       <p class="eyebrow">The business trade-off</p>
       <h2>Why the threshold matters</h2>
-      <p class="lede">The model does not decide anything. The threshold does — and it converts
-        statistical performance into an operating cost.</p>
+      <p class="lede">The model does not decide anything. The threshold does — and it
+        converts statistical performance into inspections done and claims missed.</p>
     </header>
 
     <div class="slide-body">
       <div class="card tight" style="flex:0 0 auto">
         <div class="control">
-          <label for="thr-slider-2">Decision threshold</label>
+          <label for="thr-slider-2">Decision threshold
+            <span class="gloss">the two side columns show this threshold moved by ±0.12</span></label>
           <output id="thr-out-2" style="font-size:1.3rem">0.50</output>
         </div>
-        <input type="range" class="big" id="thr-slider-2" min="0.05" max="0.90" step="0.01" value="0.50">
+        <input type="range" class="big" id="thr-slider-2" min="0.01" max="0.95" step="0.01" value="0.50">
       </div>
 
-      <div class="grid g-3 fill" style="min-height:0">
-        <div class="card spread-even">
-          <p class="card-title">Lower threshold <span class="pill warn" id="lower-thr">–</span></p>
-          <div class="flow vertical" style="margin:.6rem 0">
-            <span class="flow-step">More shipments classified high risk</span><span class="flow-arrow">↓</span>
-            <span class="flow-step">Higher recall</span><span class="flow-arrow">↓</span>
-            <span class="flow-step">More false positives</span>
+      <div class="grid g-60-40 fill" style="min-height:0">
+        <div class="card tight">
+          <p class="card-title">
+            <span>The same <span id="tt-n">6,250</span> held-out shipments, three thresholds</span>
+            <span class="muted" id="tt-model">–</span></p>
+          <div class="scroll" style="display:flex;flex-direction:column;justify-content:center">
+            <table class="compare">
+              <thead>
+                <tr>
+                  <th>Out of every shipment we ship…</th>
+                  <th class="num" id="tt-h-low">Lower</th>
+                  <th class="num cur" id="tt-h-cur">Current</th>
+                  <th class="num" id="tt-h-high">Higher</th>
+                </tr>
+              </thead>
+              <tbody id="tradeoff-table"></tbody>
+            </table>
           </div>
-          <div>
-            <div class="kv"><span>Shipments flagged</span><span id="low-flag">–</span></div>
-            <div class="kv"><span>Recall</span><span id="low-rec">–</span></div>
-            <div class="kv"><span>Precision</span><span id="low-prec">–</span></div>
-            <div class="kv"><span>False positives</span><span id="low-fp">–</span></div>
-            <div class="kv"><span>Missed claims (FN)</span><span id="low-fn">–</span></div>
-          </div>
+          <p class="card-note" id="tradeoff-note"></p>
         </div>
 
         <div class="card flush">
-          <p class="card-title" style="padding:0 .3rem">Metrics across every threshold</p>
+          <p class="card-title" style="padding:0 .3rem">Every threshold at once</p>
           <div id="chart-tradeoff" class="chart"></div>
-          <p class="card-note" style="padding:0 .3rem" id="tradeoff-note"></p>
-        </div>
-
-        <div class="card spread-even">
-          <p class="card-title">Higher threshold <span class="pill warn" id="higher-thr">–</span></p>
-          <div class="flow vertical" style="margin:.6rem 0">
-            <span class="flow-step">Fewer shipments classified high risk</span><span class="flow-arrow">↓</span>
-            <span class="flow-step">Higher precision</span><span class="flow-arrow">↓</span>
-            <span class="flow-step">More false negatives</span>
-          </div>
-          <div>
-            <div class="kv"><span>Shipments flagged</span><span id="high-flag">–</span></div>
-            <div class="kv"><span>Recall</span><span id="high-rec">–</span></div>
-            <div class="kv"><span>Precision</span><span id="high-prec">–</span></div>
-            <div class="kv"><span>False positives</span><span id="high-fp">–</span></div>
-            <div class="kv"><span>Missed claims (FN)</span><span id="high-fn">–</span></div>
-          </div>
         </div>
       </div>
 
@@ -435,7 +439,91 @@
     </div>
   </section>
 
-  <!-- ============================================= 8 · CLAIM VALUE ===== -->
+  <!-- ========================================== 8 · COST OF A THRESHOLD = -->
+  <section class="slide" data-title="Cost">
+    <header class="slide-head">
+      <p class="eyebrow">Cost-benefit optimisation</p>
+      <h2>What threshold actually costs least?</h2>
+      <p class="lede">Recall and precision do not pay invoices. Put a price on an
+        inspection and on a missed claim, and the right threshold stops being a
+        matter of taste.</p>
+    </header>
+
+    <div class="slide-body">
+      <div class="card tight" style="flex:0 0 auto">
+        <div class="grid g-2" style="gap:1.4rem">
+          <div>
+            <div class="control">
+              <label for="cost-slider">Cost of acting on one flagged shipment
+                <span class="gloss">inspection, repacking, re-tendering</span></label>
+              <output id="cost-out" style="font-size:1.2rem">₹2,281</output>
+            </div>
+            <input type="range" id="cost-slider" min="100" max="6000" step="25" value="2281">
+          </div>
+          <div>
+            <div class="control">
+              <label for="eff-slider">Damage that acting actually prevents
+                <span class="gloss">no anchor in the data — your assumption</span></label>
+              <output id="eff-out" style="font-size:1.2rem">60%</output>
+            </div>
+            <input type="range" id="eff-slider" min="0.1" max="0.9" step="0.05" value="0.6">
+          </div>
+        </div>
+        <p class="card-note" id="cost-rationale"></p>
+      </div>
+
+      <div class="grid g-3 fill" style="min-height:0">
+        <div class="card flush">
+          <p class="card-title" style="padding:0 .3rem">Total cost by threshold
+            <span class="muted">backtested on realised claims</span></p>
+          <div id="chart-cost" class="chart"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:.7rem;min-height:0">
+          <div class="card" style="flex:0 0 auto">
+            <span class="stat-label">Cheapest threshold</span>
+            <span class="stat-value xl pos" id="cost-opt-t">–</span>
+            <span class="stat-sub" id="cost-opt-sub"></span>
+            <button class="btn" id="adopt-optimal" type="button"
+                    style="margin-top:.5rem;align-self:flex-start">Adopt this threshold</button>
+          </div>
+          <div class="card tight" style="flex:1 1 auto;min-height:0">
+            <p class="card-title">Where the money goes</p>
+            <div class="scroll">
+            <div class="kv"><span>Do nothing</span><span id="cost-nothing">–</span></div>
+            <div class="kv"><span>At the current threshold</span><span id="cost-current">–</span></div>
+            <div class="kv"><span>At the cheapest threshold</span><span id="cost-best">–</span></div>
+            <div class="kv" style="border-top:1px solid var(--line);padding-top:.35rem">
+              <span>Saved vs doing nothing</span><span class="pos" id="cost-saving">–</span></div>
+            <div class="kv"><span>Left on the table today</span>
+              <span class="neg" id="cost-excess">–</span></div>
+            </div>
+          </div>
+          <div class="card tight" style="flex:0 0 auto">
+            <p class="card-title">The same answer in one line</p>
+            <p class="formula" id="cost-formula">–</p>
+            <p class="card-note" id="cost-formula-note"></p>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:.7rem;min-height:0">
+          <div class="card flush" style="flex:1 1 auto;min-height:0">
+            <p class="card-title" style="padding:0 .3rem">
+              <span>What each policy saves
+                <span class="gloss">against doing nothing at all</span></span></p>
+            <div id="chart-cost-compare" class="chart"></div>
+          </div>
+          <div class="card tight" style="flex:0 0 auto">
+            <p class="card-title">Ranking beats a cut-off
+              <span class="pill" id="el-win">–</span></p>
+            <p class="card-note" id="el-explain" style="margin:0"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================= 9 · CLAIM VALUE ===== -->
   <section class="slide" data-title="Claim value">
     <header class="slide-head">
       <p class="eyebrow">Claim severity · regression on shipments that produced a claim</p>
@@ -478,7 +566,8 @@
           </div>
           <div class="card">
             <p class="card-title">Expected loss</p>
-            <div class="grid g-2" style="gap:.5rem">
+            <div class="scroll">
+            <div class="grid g-2" style="gap:.5rem;min-height:0">
               <div class="stat"><span class="stat-value sm" id="cv-p">–</span>
                 <span class="stat-label">Probability of claim</span></div>
               <div class="stat"><span class="stat-value sm" id="cv-ev">–</span>
@@ -491,6 +580,7 @@
             <p class="card-note">This is a model-based expected value across many similar
               shipments, not a guaranteed outcome for this one. A single shipment either
               produces a claim or it does not.</p>
+            </div>
           </div>
           <div class="card tight" style="flex:1 1 auto;min-height:0">
             <p class="card-title">What drives claim size</p>
@@ -501,7 +591,7 @@
     </div>
   </section>
 
-  <!-- ========================================= 9 · MODEL COMPARISON ==== -->
+  <!-- ========================================= 10 · MODEL COMPARISON ==== -->
   <section class="slide" data-title="Comparison">
     <header class="slide-head">
       <p class="eyebrow">Model comparison · held-out test set</p>
@@ -531,13 +621,15 @@
         </div>
 
         <div style="display:flex;flex-direction:column;gap:.8rem;min-height:0">
-          <div class="card tight">
+          <div class="card tight" style="flex:0 1 auto;min-height:0">
             <p class="card-title">Claim value models</p>
-            <table>
-              <thead><tr><th>Model</th><th class="num">MAE</th><th class="num">RMSE</th>
-                <th class="num">R²</th></tr></thead>
-              <tbody id="cmp-reg-table"></tbody>
-            </table>
+            <div class="scroll">
+              <table>
+                <thead><tr><th>Model</th><th class="num">MAE</th><th class="num">RMSE</th>
+                  <th class="num">R²</th></tr></thead>
+                <tbody id="cmp-reg-table"></tbody>
+              </table>
+            </div>
           </div>
           <div class="card tight" style="flex:1 1 auto;min-height:0">
             <p class="card-title">Logistic Regression — largest effects
@@ -556,7 +648,7 @@
     </div>
   </section>
 
-  <!-- ====================================== 10 · DRIVERS AND WHAT-IF === -->
+  <!-- ====================================== 11 · DRIVERS AND WHAT-IF === -->
   <section class="slide" data-title="What-if">
     <header class="slide-head">
       <p class="eyebrow">Risk drivers · what-if simulation</p>
@@ -570,7 +662,7 @@
             <span class="seg" id="imp-seg"></span></p>
           <div class="scroll spread-even" id="driver-bars"
                style="display:flex;flex-direction:column"></div>
-          <p class="card-note" id="driver-note"></p>
+          <p class="card-note" id="driver-note" style="flex:0 0 auto"></p>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:.7rem;min-height:0">
@@ -581,24 +673,25 @@
           </div>
 
           <div class="grid g-3" style="flex:1 1 auto;min-height:0">
-            <div class="card" style="justify-content:center">
+            <div class="card" style="justify-content:center;overflow:hidden">
               <span class="stat-label">Current</span>
-              <span class="stat-value xl" id="wi-current">–</span>
+              <span class="stat-value" id="wi-current">–</span>
               <span class="stat-sub">claim risk</span>
             </div>
-            <div class="card" style="justify-content:center">
+            <div class="card" style="justify-content:center;overflow:hidden">
               <span class="stat-label">What-if</span>
-              <span class="stat-value xl accent" id="wi-new">–</span>
+              <span class="stat-value accent" id="wi-new">–</span>
               <span class="stat-sub">claim risk</span>
             </div>
-            <div class="card" style="justify-content:center">
+            <div class="card" style="justify-content:center;overflow:hidden">
               <span class="stat-label">Change</span>
-              <span class="stat-value xl" id="wi-delta">–</span>
+              <span class="stat-value" id="wi-delta">–</span>
               <span class="stat-sub">percentage points</span>
             </div>
           </div>
 
-          <div class="card tight" style="flex:0 0 auto">
+          <div class="card tight" style="flex:0 1 auto;min-height:0">
+            <div class="scroll">
             <div class="grid g-4" style="gap:.5rem">
               <div class="stat"><span class="stat-value sm" id="wi-lr">–</span>
                 <span class="stat-label">Logistic</span></div>
@@ -611,13 +704,14 @@
             </div>
             <p class="card-note"><span class="pill plain">Model-implied change</span>
               <span id="wi-caveat"></span></p>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ============================================== 11 · DECISION ====== -->
+  <!-- ============================================== 12 · DECISION ====== -->
   <section class="slide" data-title="Decision">
     <header class="slide-head">
       <p class="eyebrow">From prediction to decision</p>
@@ -676,10 +770,16 @@
 <nav class="navbar">
   <div class="nav-side">
     <button class="nav-btn" id="prev-btn" type="button">← Previous</button>
+    <span class="scenario-chip" id="scenario-chip" title="The shipment every scenario page is scoring">–</span>
   </div>
   <div class="dots" id="dots"></div>
   <div class="nav-side">
-    <span class="counter" id="counter"><b>1</b> / 11</span>
+    <span class="presenter">
+      <button class="icon-btn" id="font-down" type="button" title="Smaller text">A−</button>
+      <button class="icon-btn" id="font-up" type="button" title="Larger text">A+</button>
+      <button class="icon-btn" id="theme-toggle" type="button" title="Light / dark">Dark</button>
+    </span>
+    <span class="counter" id="counter"><b>1</b> / 12</span>
     <button class="nav-btn" id="next-btn" type="button">Next →</button>
   </div>
 </nav>

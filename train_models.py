@@ -236,19 +236,23 @@ def main() -> None:
         "bagging": cls.grouped_importance(models["bagging"], numeric, categorical),
     }
 
-    np.savez_compressed(
-        os.path.join(MODELS_DIR, "eval_probs.npz"),
-        y_test=y_test.to_numpy(),
-        **{f"p_{k}": v for k, v in probs.items()},
-    )
+
 
     # ---------------- claim value regression ------------------------------
-    log("claim value regression (claims only)")
-    claims = df[df[TARGET_CLS] == 1].copy()
-    Xr = claims[features]
-    yr = claims[TARGET_REG].astype(float)
-    Xr_tr, Xr_te, yr_tr, yr_te = train_test_split(
-        Xr, yr, test_size=TEST_SIZE, random_state=RANDOM_STATE)
+    # The split is nested inside the classifier's split: fit on claims that fall
+    # in X_train, score on claims that fall in X_test. Drawing a fresh split over
+    # all claims would be fine for judging this model alone, but it would leave
+    # most of the classifier's test claims inside the value model's training set,
+    # and the cost analysis combines both models over exactly that test set.
+    log("claim value regression (claims only, split nested in the classifier's)")
+    train_claims = X_train.index[y_train == 1]
+    test_claims = X_test.index[y_test == 1]
+    overlap = len(set(train_claims) & set(test_claims))
+    assert overlap == 0, f"{overlap} claim rows are in both value-model splits"
+    log(f"  fit on {len(train_claims):,} claims | scored on {len(test_claims):,} unseen claims")
+
+    Xr_tr, yr_tr = df.loc[train_claims, features], df.loc[train_claims, TARGET_REG].astype(float)
+    Xr_te, yr_te = df.loc[test_claims, features], df.loc[test_claims, TARGET_REG].astype(float)
 
     regressors = reg.build_regressors(numeric, categorical)
     reg_meta = {}
@@ -271,6 +275,23 @@ def main() -> None:
         regressors["linear"].named_steps["prep"], numeric, categorical)
     reg_meta["linear"]["drivers"] = reg.linear_drivers(regressors["linear"], enc_names)
     best_reg = max(reg_meta, key=lambda k: reg_meta[k]["metrics"]["r2"])
+
+    # ---------------- cost analysis inputs --------------------------------
+    # Realised loss per test shipment (zero where no claim was raised) and the
+    # value model's quote for every test shipment, so slide 8 can backtest a
+    # decision rule against what actually happened.
+    claim_amount_test = df.loc[X_test.index, TARGET_REG].fillna(0.0).to_numpy(dtype=float)
+    pred_value_test = reg.predict_rupees(regressors[best_reg], X_test)
+    np.savez_compressed(
+        os.path.join(MODELS_DIR, "eval_probs.npz"),
+        y_test=y_test.to_numpy(),
+        claim_amount_test=claim_amount_test,
+        pred_value_test=pred_value_test,
+        **{f"p_{k}": v for k, v in probs.items()},
+    )
+    realised_loss = float(claim_amount_test.sum())
+    log(f"  realised loss on the test set Rs {realised_loss:,.0f} "
+        f"(Rs {realised_loss / len(X_test):,.0f} per shipment)")
 
     # ---------------- lane clustering -------------------------------------
     log("K-Means lane archetypes")
@@ -306,13 +327,31 @@ def main() -> None:
         })
 
     best_cls = max(model_meta, key=lambda k: model_meta[k]["metrics"]["pr_auc"])
+
+    # Default intervention cost is anchored to the loss the business already
+    # carries per shipment, so the opening state of slide 8 is a real number from
+    # this dataset rather than an invented figure. Prevention effectiveness has no
+    # anchor in the data at all and is labelled as an assumption on screen.
+    cost_defaults = {
+        "cost_per_flagged": float(round(realised_loss / len(X_test))),
+        "effectiveness": 0.6,
+        "cost_min": 100.0, "cost_max": 6000.0, "cost_step": 25.0,
+        "effectiveness_min": 0.1, "effectiveness_max": 0.9, "effectiveness_step": 0.05,
+        "realised_loss": realised_loss,
+        "loss_per_shipment": float(realised_loss / len(X_test)),
+        "mean_claim": float(claim_amount_test[y_test.to_numpy() == 1].mean()),
+        "rationale": ("Default intervention cost = the loss this book already carries "
+                      "per shipment. Prevention effectiveness is an assumption with no "
+                      "anchor in the data - move both sliders and watch the optimum."),
+    }
     artefacts = {
         "generated_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
         "dataset": {
             "rows": int(len(df)), "columns": int(df.shape[1]),
             "train_rows": int(len(X_train)), "test_rows": int(len(X_test)),
-            "claim_rows": int(len(claims)),
+            "claim_rows": int((df[TARGET_CLS] == 1).sum()),
             "reg_train_rows": int(len(Xr_tr)), "reg_test_rows": int(len(Xr_te)),
+            "reg_split": "nested inside the classifier split",
             "test_size": TEST_SIZE, "random_state": RANDOM_STATE,
             "missing_pct": {c: float(round(df[c].isna().mean() * 100, 2))
                             for c in features if df[c].isna().any()},
@@ -332,6 +371,7 @@ def main() -> None:
         "baseline": baseline,
         "controls": control_meta,
         "carriers": carrier_profiles(df),
+        "cost_defaults": cost_defaults,
     }
 
     out = os.path.join(MODELS_DIR, "artifacts.json")
