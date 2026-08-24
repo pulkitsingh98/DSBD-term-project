@@ -7,7 +7,11 @@
    ========================================================================== */
 
 :root {
-  font-size: clamp(11px, calc(0.5vw + 0.78vh), 20px);
+  /* Type scales with the viewport so the deck keeps its proportions from a
+     laptop to a lecture-hall projector, and --text-scale lets the presenter
+     nudge it live from the nav bar when the back row still cannot read it. */
+  --text-scale: 1;
+  font-size: calc(clamp(13px, calc(0.58vw + 0.95vh), 24px) * var(--text-scale));
 
   --ink:        #101828;
   --ink-soft:   #475467;
@@ -28,9 +32,48 @@
   --bad:   #b42318;
   --bad-soft: #fef3f2;
 
+  /* Categorical series, read by charts.js so both themes stay in step. */
+  --cat-1: #1d4ed8; --cat-2: #0e9384; --cat-3: #b54708;
+  --cat-4: #7a5af8; --cat-5: #b42318; --cat-6: #0086c9;
+  --accent-fill: rgba(29, 78, 216, .07);
+
   --radius: 0.85rem;
   --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 16px -8px rgba(16, 24, 40, .12);
 }
+
+/* Dark theme. Same token names, so every rule below and every chart in
+   charts.js picks the new values up without knowing a theme exists. The tinted
+   fills are rebuilt rather than darkened: the light pastels wash out to grey on
+   a dark ground and stop reading as good / warning / bad. */
+:root[data-theme="dark"] {
+  --ink:        #f2f4f7;
+  --ink-soft:   #b6bdc9;
+  --ink-faint:  #7d8695;
+  --line:       #2c3340;
+  --line-soft:  #232935;
+  --paper:      #171b23;
+  --canvas:     #0e1117;
+
+  --accent:      #7fa2ff;
+  --accent-soft: #1b2440;
+  --accent-line: #2f4380;
+
+  --good:  #5fd18c;
+  --good-soft: #12291d;
+  --warn:  #f0b45e;
+  --warn-soft: #2c2113;
+  --bad:   #f58b83;
+  --bad-soft: #331a19;
+
+  --cat-1: #7fa2ff; --cat-2: #4fd1bd; --cat-3: #f0b45e;
+  --cat-4: #b39bff; --cat-5: #f58b83; --cat-6: #5cc4f0;
+  --accent-fill: rgba(127, 162, 255, .12);
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 16px -8px rgba(0, 0, 0, .5);
+}
+
+html { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 
@@ -78,7 +121,7 @@ html, body {
 
 .slide-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: .9rem; }
 
-.grid { display: grid; gap: .9rem; min-height: 0; }
+.grid { display: grid; gap: .9rem; min-height: 0; min-width: 0; }
 .grid.top { align-content: start; }
 /* Cards whose content is shorter than the space they are given: spread the
    content down the card instead of stranding it at the top. */
@@ -94,6 +137,9 @@ html, body {
 .g-65-35 { grid-template-columns: 1.9fr 1fr; }
 .rows-2 { grid-template-rows: 1fr 1fr; }
 .fill { min-height: 0; flex: 1 1 auto; }
+/* A grid row defaults to auto and will happily grow past the slide if its
+   tallest card asks to. Capping implicit rows keeps every slide one viewport. */
+.grid.fill { grid-auto-rows: minmax(0, 1fr); }
 
 /* -------------------------------------------------------------- cards ---- */
 .card {
@@ -117,6 +163,9 @@ html, body {
 .card-title > span:first-child { display: inline; }
 .card-title .muted { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--ink-faint); }
 .card-note { font-size: .78rem; color: var(--ink-faint); margin: .45rem 0 0; line-height: 1.45; }
+/* Plain-English gloss under a technical term. */
+.gloss { font-size: .72rem; color: var(--ink-faint); font-weight: 450;
+  letter-spacing: 0; text-transform: none; display: block; margin-top: .1rem; }
 
 /* ------------------------------------------------------------- numbers --- */
 .stat { display: flex; flex-direction: column; gap: .1rem; }
@@ -134,9 +183,9 @@ html, body {
   font-size: .72rem; font-weight: 620; letter-spacing: .02em;
   background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
 }
-.pill.ok   { background: var(--good-soft); color: var(--good); border-color: #abefc6; }
-.pill.warn { background: var(--warn-soft); color: var(--warn); border-color: #fedf89; }
-.pill.bad  { background: var(--bad-soft);  color: var(--bad);  border-color: #fecdca; }
+.pill.ok   { background: var(--good-soft); color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.pill.bad  { background: var(--bad-soft);  color: var(--bad);  border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
 .pill.plain{ background: var(--line-soft); color: var(--ink-soft); border-color: var(--line); }
 
 /* -------------------------------------------------------------- charts --- */
@@ -165,12 +214,12 @@ input[type="range"]::-moz-range-track { height: .3rem; border-radius: 999px; bac
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: .95rem; height: .95rem; border-radius: 50%;
-  background: var(--accent); border: 2px solid #fff; margin-top: -.33rem;
-  box-shadow: 0 1px 4px rgba(29, 78, 216, .45);
+  background: var(--accent); border: 2px solid var(--paper); margin-top: -.33rem;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 input[type="range"]::-moz-range-thumb {
-  width: .95rem; height: .95rem; border-radius: 50%; border: 2px solid #fff;
-  background: var(--accent); box-shadow: 0 1px 4px rgba(29, 78, 216, .45);
+  width: .95rem; height: .95rem; border-radius: 50%; border: 2px solid var(--paper);
+  background: var(--accent); box-shadow: 0 1px 4px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 input[type="range"].big { height: 1.9rem; }
 input[type="range"].big::-webkit-slider-runnable-track { height: .55rem; }
@@ -215,6 +264,29 @@ td { padding: .32rem .45rem; border-bottom: 1px solid var(--line-soft); font-var
 td.num, th.num { text-align: right; }
 tbody tr:last-child td { border-bottom: 0; }
 .scroll { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+
+/* Three-column threshold comparison. The current policy is the anchor, so it is
+   the column that is tinted and bold - the eye reads left and right from it. */
+.compare td, .compare th { padding: .42rem .5rem; }
+.compare td:first-child { color: var(--ink-soft); }
+.compare .cur { background: var(--accent-soft); }
+.compare td.cur { font-weight: 680; color: var(--ink); }
+.compare th.cur { color: var(--accent); }
+.compare .delta {
+  display: block; font-size: .68rem; font-weight: 600;
+  font-variant-numeric: tabular-nums; margin-top: .05rem;
+}
+.compare .delta.worse { color: var(--bad); }
+.compare .delta.better { color: var(--good); }
+.compare .delta.flat { color: var(--ink-faint); }
+.compare .unit { color: var(--ink-faint); font-weight: 500; }
+
+.formula {
+  margin: .2rem 0 0; padding: .5rem .6rem; border-radius: .5rem;
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  color: var(--accent); font-size: .95rem; font-weight: 650;
+  text-align: center; font-variant-numeric: tabular-nums;
+}
 .swatch { display: inline-block; width: .55rem; height: .55rem; border-radius: 2px; margin-right: .4rem; }
 
 /* ------------------------------------------------------- flow diagrams --- */
@@ -269,10 +341,10 @@ tbody tr:last-child td { border-bottom: 0; }
 }
 .cm-cell .n { font-size: 1.55rem; font-weight: 690; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; }
 .cm-cell .l { font-size: .68rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.cm-tp { background: var(--good-soft); color: var(--good); border-color: #abefc6; }
+.cm-tp { background: var(--good-soft); color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
 .cm-tn { background: var(--line-soft); color: var(--ink-soft); border-color: var(--line); }
-.cm-fp { background: var(--warn-soft); color: var(--warn); border-color: #fedf89; }
-.cm-fn { background: var(--bad-soft); color: var(--bad); border-color: #fecdca; }
+.cm-fp { background: var(--warn-soft); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+.cm-fn { background: var(--bad-soft); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
 
 /* ------------------------------------------------------------- title ----- */
 .title-slide { justify-content: center; gap: 1.4rem; }
@@ -282,7 +354,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .q-card { display: flex; gap: .7rem; align-items: flex-start; }
 .q-num {
   flex: 0 0 auto; width: 1.9rem; height: 1.9rem; border-radius: 50%;
-  background: var(--accent); color: #fff; display: flex; align-items: center;
+  background: var(--accent); color: var(--canvas); display: flex; align-items: center;
   justify-content: center; font-weight: 680; font-size: .92rem;
 }
 .q-text { font-size: .92rem; line-height: 1.42; font-weight: 550; }
@@ -290,11 +362,13 @@ tbody tr:last-child td { border-bottom: 0; }
 .freight-art { width: 100%; height: 100%; display: block; }
 
 /* ------------------------------------------------------------ var cards -- */
-.varcard { background: var(--paper); border: 1px solid var(--line); border-radius: .7rem; padding: .55rem .7rem; box-shadow: var(--shadow); }
+.varcard { background: var(--paper); border: 1px solid var(--line); border-radius: .7rem;
+  padding: .55rem .7rem; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .varcard.target { background: var(--accent-soft); border-color: var(--accent-line); }
-.varcard h4 { margin: 0 0 .3rem; font-size: .8rem; font-weight: 660; letter-spacing: .02em;
+.varcard h4 { flex: 0 0 auto; margin: 0 0 .3rem; font-size: .8rem; font-weight: 660; letter-spacing: .02em;
   color: var(--accent); }
-.varcard ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .1rem; }
+.varcard ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .1rem; overflow-y: auto; min-height: 0; }
 .varcard li { font-size: .74rem; color: var(--ink-soft); line-height: 1.42; }
 
 /* ----------------------------------------------------------- nav bar ----- */
@@ -319,10 +393,30 @@ tbody tr:last-child td { border-bottom: 0; }
   font-weight: 620; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .dot:hover { border-color: var(--accent-line); color: var(--accent); }
-.dot.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dot.on { background: var(--accent); border-color: var(--accent); color: var(--canvas); }
 .counter { font-size: .8rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 8rem; }
 .counter b { color: var(--ink); font-weight: 660; }
 .nav-side { display: flex; align-items: center; gap: .7rem; }
+
+/* Names the shipment every scenario page is scoring, so slides 5, 9, 11 and 12
+   read as one continuous example rather than four unrelated pages. */
+.scenario-chip {
+  display: inline-flex; align-items: center; gap: .4rem;
+  max-width: 24rem; padding: .25rem .65rem; border-radius: 999px;
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  color: var(--accent); font-size: .74rem; font-weight: 560;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.scenario-chip b { font-weight: 700; }
+
+.icon-btn {
+  font: inherit; font-size: .8rem; font-weight: 620; line-height: 1;
+  color: var(--ink-soft); background: var(--paper);
+  border: 1px solid var(--line); border-radius: .45rem;
+  padding: .32rem .5rem; cursor: pointer; min-width: 1.9rem;
+}
+.icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+.presenter { display: inline-flex; align-items: center; gap: .25rem; }
 
 .loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   background: var(--canvas); z-index: 50; font-size: .95rem; color: var(--ink-soft); gap: .6rem; }

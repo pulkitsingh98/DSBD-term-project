@@ -10,6 +10,17 @@
   <link rel="stylesheet" media="print" onload="this.media='all'"
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    // Applied before first paint so the deck never flashes the wrong theme or
+    // text size on the way in. Storage throws in some private-window modes.
+    try {
+      var t = localStorage.getItem('deck-theme');
+      if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = t;
+      var scale = localStorage.getItem('deck-text-scale');
+      if (scale) document.documentElement.style.setProperty('--text-scale', scale);
+    } catch (e) { document.documentElement.dataset.theme = 'light'; }
+  </script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128666;</text></svg>">
 </head>
 <body>

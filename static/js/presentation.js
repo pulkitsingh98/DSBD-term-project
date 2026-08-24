@@ -22,7 +22,13 @@ const state = {
   impModel: 'random_forest',
   clusters: null,
   thresholdResult: null,
+  cost: null,
+  costResult: null,
+  effectiveness: 0.6,
+  textScale: 1,
 };
+
+const THRESHOLD_STEP = 0.12;   // how far the side columns on slide 7 move
 
 const CLASSIFIER_ORDER = ['logistic', 'random_forest', 'bagging'];
 const CLASSIFIER_SHORT = {
@@ -97,6 +103,61 @@ function debounce(fn, wait = 90) {
 
 function control(name) {
   return state.boot.controls.find((c) => c.name === name);
+}
+
+/* ------------------------------------------------ theme and text size --- */
+/**
+ * Presenter controls.
+ *
+ * A deck is shown on hardware nobody tested it on. Rather than guess one type
+ * size and one background, both are adjustable at the podium and remembered per
+ * browser. Storage can throw (private windows), so every access is guarded.
+ */
+function readStored(key, fallback) {
+  try { return localStorage.getItem(key) ?? fallback; } catch (e) { return fallback; }
+}
+function writeStored(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { /* not fatal */ }
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  writeStored('deck-theme', theme);
+  $('theme-toggle').textContent = theme === 'dark' ? 'Light' : 'Dark';
+  $('theme-toggle').title = theme === 'dark' ? 'Switch to light' : 'Switch to dark';
+  // Plotly bakes colours in at draw time, so the figures need replaying.
+  Charts.redrawAll();
+  requestAnimationFrame(() => Charts.resizeVisible(slides[state.slide]));
+}
+
+function applyTextScale(scale) {
+  // Slides are packed to one viewport by design, so type can only grow so far
+  // before the densest slide runs out of room. 1.05 is the measured ceiling at
+  // which every slide still holds; the base size was already raised ~19%, so
+  // this control is mostly a fine adjustment and a way down on cramped screens.
+  state.textScale = Math.min(1.05, Math.max(0.85, Math.round(scale * 100) / 100));
+  document.documentElement.style.setProperty('--text-scale', state.textScale);
+  writeStored('deck-text-scale', state.textScale);
+  // Chart fonts are sized from the root, and Plotly will not notice on its own.
+  Charts.redrawAll();
+  requestAnimationFrame(() => Charts.resizeVisible(slides[state.slide]));
+}
+
+function buildPresenterControls() {
+  const stored = readStored('deck-theme', null);
+  const theme = stored
+    || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.dataset.theme = theme;
+  $('theme-toggle').textContent = theme === 'dark' ? 'Light' : 'Dark';
+
+  state.textScale = parseFloat(readStored('deck-text-scale', '1')) || 1;
+  document.documentElement.style.setProperty('--text-scale', state.textScale);
+
+  $('theme-toggle').addEventListener('click', () => {
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+  $('font-up').addEventListener('click', () => applyTextScale(state.textScale + 0.05));
+  $('font-down').addEventListener('click', () => applyTextScale(state.textScale - 0.05));
 }
 
 /* --------------------------------------------------------- navigation --- */
@@ -265,7 +326,7 @@ async function refreshClusters() {
 
   $('cluster-table').innerHTML = data.summary.map((c) => `
     <tr>
-      <td><span class="swatch" style="background:${Charts.CAT[c.cluster % Charts.CAT.length]}"></span>
+      <td><span class="swatch" style="background:${Charts.catVar(c.cluster)}"></span>
         ${c.archetype}</td>
       <td class="num">${c.lane_count}</td>
       <td class="num">${fmtPct(c.claim_rate)}</td>
@@ -273,15 +334,9 @@ async function refreshClusters() {
       <td class="num">${fmtRs(c.expected_loss_per_shipment)}</td>
     </tr>`).join('');
 
-  $('cluster-examples').innerHTML = data.summary.map((c) => `
-    <div class="kv" style="align-items:flex-start">
-      <span><span class="swatch" style="background:${Charts.CAT[c.cluster % Charts.CAT.length]}"></span>
-        ${c.archetype}</span>
-      <span style="font-weight:500;text-align:right;color:var(--ink-soft)">
-        ${c.example_lanes.join(' · ')}</span>
-    </div>`).join('');
-
   Charts.clusterScatter(data.points, data.summary);
+  Charts.clusterHeatmap(data.summary, state.boot.clusters.features,
+                        state.boot.clusters.feature_labels);
   Charts.elbowChart(data.elbow, state.k);
   scheduleScenarioRefresh();
 }
@@ -496,6 +551,16 @@ async function refreshPrediction() {
   const hist = state.boot.classification[state.boot.best_classifier].prob_hist;
   Charts.probDistribution(hist, data.primary.probability, 'this shipment');
 
+  // Names the shipment in the nav bar so the scenario pages read as one example.
+  const inputs = data.inputs;
+  $('scenario-chip').innerHTML =
+    `<b>${inputs.origin_city}→${inputs.destination_city}</b> · ` +
+    `fragility ${inputs.fragility_class} · <b>${fmtPct(data.primary.probability)}</b>`;
+  $('scenario-chip').title =
+    `Slides 5, 9, 11 and 12 all score this shipment: ${inputs.origin_city} to ` +
+    `${inputs.destination_city}, ${inputs.product_category}, fragility ` +
+    `${inputs.fragility_class}, ${inputs.packaging_type}`;
+
   renderClaimValuePanel(data);
 }
 
@@ -572,7 +637,7 @@ function renderThresholdControls() {
 
 /** Single place that moves the threshold, so both sliders stay in step. */
 function setThreshold(value) {
-  state.threshold = Math.round(value * 100) / 100;
+  state.threshold = Math.min(0.95, Math.max(0.01, Math.round(value * 100) / 100));
   $('thr-slider').value = state.threshold;
   $('thr-slider-2').value = state.threshold;
   $('thr-out').textContent = state.threshold.toFixed(2);
@@ -608,16 +673,23 @@ async function refreshThreshold() {
   Charts.prChart('chart-pr', curves, data, data.base_rate);
 
   renderTradeoff(data).catch(fail);
+  scheduleCost();
   scheduleScenarioRefresh();
 }
 
-/** Page 7: same threshold, framed as the business trade-off around it. */
+/**
+ * Page 7: the same threshold, read as a decision rather than a metric.
+ *
+ * Three columns anchored on the current policy, so the comparison is a sideways
+ * glance rather than ten numbers held in the head. Every figure is a count out
+ * of a stated total - a percentage with no denominator is what made the earlier
+ * version of this page unreadable.
+ */
 async function renderTradeoff(current) {
   const model = state.thrModel;
   const token = ticket('tradeoff');
-  const step = 0.12;
-  const lower = Math.max(0.05, Math.round((state.threshold - step) * 100) / 100);
-  const higher = Math.min(0.90, Math.round((state.threshold + step) * 100) / 100);
+  const lower = Math.max(0.01, Math.round((state.threshold - THRESHOLD_STEP) * 100) / 100);
+  const higher = Math.min(0.99, Math.round((state.threshold + THRESHOLD_STEP) * 100) / 100);
 
   const [lo, hi] = await Promise.all([
     api(`/api/threshold?model=${model}&threshold=${lower}`),
@@ -625,37 +697,176 @@ async function renderTradeoff(current) {
   ]);
   if (!isCurrent('tradeoff', token)) return;
 
-  $('lower-thr').textContent = lower.toFixed(2);
-  $('higher-thr').textContent = higher.toFixed(2);
-  const fill = (prefix, d) => {
-    $(`${prefix}-flag`).textContent = `${fmtNum(d.flagged)} (${fmtPct(d.flagged_pct)})`;
-    $(`${prefix}-rec`).textContent = fmtPct(d.recall);
-    $(`${prefix}-prec`).textContent = fmtPct(d.precision);
-    $(`${prefix}-fp`).textContent = fmtNum(d.fp);
-    $(`${prefix}-fn`).textContent = fmtNum(d.fn);
+  const claims = current.tp + current.fn;
+  $('tt-n').textContent = fmtNum(current.n);
+  $('tt-model').textContent = `${current.model_name} · ${fmtNum(claims)} of them did produce a claim`;
+  $('tt-h-low').textContent = `Lower · ${lower.toFixed(2)}`;
+  $('tt-h-cur').textContent = `Current · ${state.threshold.toFixed(2)}`;
+  $('tt-h-high').textContent = `Higher · ${higher.toFixed(2)}`;
+
+  // Rows are phrased as things a business does, with the statistical name kept
+  // in parentheses so the vocabulary is still learnable from the slide.
+  const rows = [
+    {
+      label: 'Shipments we inspect',
+      value: (d) => `${fmtNum(d.flagged)} <span class="unit">of ${fmtNum(d.n)}</span>`,
+      raw: (d) => d.flagged, better: 'down',
+    },
+    {
+      label: 'Real claims we catch <span class="unit">(recall)</span>',
+      value: (d) => `${fmtNum(d.tp)} <span class="unit">of ${fmtNum(claims)}</span>`,
+      raw: (d) => d.tp, better: 'up',
+    },
+    {
+      label: 'Real claims we miss',
+      value: (d) => fmtNum(d.fn),
+      raw: (d) => d.fn, better: 'down',
+    },
+    {
+      label: 'Inspections that found nothing',
+      value: (d) => fmtNum(d.fp),
+      raw: (d) => d.fp, better: 'down',
+    },
+    {
+      label: 'Hit rate when we inspect <span class="unit">(precision)</span>',
+      value: (d) => (d.flagged ? fmtPct(d.precision) : '—'),
+      raw: (d) => d.precision, better: 'up', isRate: true,
+    },
+    {
+      label: 'Wasted inspections per claim caught',
+      value: (d) => (d.tp ? (d.fp / d.tp).toFixed(2) : '—'),
+      raw: (d) => (d.tp ? d.fp / d.tp : 0), better: 'down', isRatio: true,
+    },
+  ];
+
+  const delta = (row, d) => {
+    const diff = row.raw(d) - row.raw(current);
+    const tolerance = row.isRate ? 0.0005 : row.isRatio ? 0.005 : 0.5;
+    if (Math.abs(diff) < tolerance) {
+      return '<span class="delta flat">no change</span>';
+    }
+    const good = (diff > 0) === (row.better === 'up');
+    const sign = diff > 0 ? '+' : '−';
+    let text;
+    if (row.isRate) text = `${sign}${Math.abs(diff * 100).toFixed(1)} pp`;
+    else if (row.isRatio) text = `${sign}${Math.abs(diff).toFixed(2)}`;
+    else text = `${sign}${fmtNum(Math.abs(diff))}`;
+    return `<span class="delta ${good ? 'better' : 'worse'}">${text}</span>`;
   };
-  fill('low', lo);
-  fill('high', hi);
+
+  $('tradeoff-table').innerHTML = rows.map((row) => `
+    <tr>
+      <td>${row.label}</td>
+      <td class="num">${row.value(lo)}${delta(row, lo)}</td>
+      <td class="num cur">${row.value(current)}</td>
+      <td class="num">${row.value(hi)}${delta(row, hi)}</td>
+    </tr>`).join('');
 
   Charts.tradeoffChart(state.boot.classification[model].sweep, state.threshold);
   $('tradeoff-note').textContent =
-    `Curves are fixed model properties. Only the red line — the chosen threshold — moves.`;
+    'The curves are fixed properties of the model. Only the red line — the threshold ' +
+    'you choose — moves.';
 
-  const extraCaught = lo.tp - hi.tp;
-  const extraFalse = lo.fp - hi.fp;
-  const costRatio = extraFalse > 0 ? extraFalse / Math.max(extraCaught, 1) : null;
-  $('tradeoff-interp').innerHTML =
-    `Moving from <strong>${higher.toFixed(2)}</strong> down to <strong>${lower.toFixed(2)}</strong> ` +
-    `catches <strong>${fmtNum(extraCaught)}</strong> more real claims but raises ` +
-    `<strong>${fmtNum(extraFalse)}</strong> more false alarms` +
-    (costRatio ? ` — about <strong>${costRatio.toFixed(1)} extra inspections per additional ` +
-      `claim caught</strong>. ` : '. ') +
-    `A lower threshold is justified whenever missing a genuinely risky shipment costs more ` +
-    `than ${costRatio ? costRatio.toFixed(1) : 'that many'} unnecessary inspections. ` +
-    `At the current setting of ${state.threshold.toFixed(2)} the model flags ` +
-    `${fmtPct(current.flagged_pct)} of shipments and finds ${fmtPct(current.recall)} of all claims.`;
+  const extraCaught = current.tp - hi.tp;
+  const extraWasted = current.fp - hi.fp;
+  $('tradeoff-interp').innerHTML = extraCaught > 0
+    ? `Coming down from <strong>${higher.toFixed(2)}</strong> to the current ` +
+      `<strong>${state.threshold.toFixed(2)}</strong> catches ` +
+      `<strong>${fmtNum(extraCaught)}</strong> more real claims and costs ` +
+      `<strong>${fmtNum(extraWasted)}</strong> more inspections that find nothing. ` +
+      `Whether that is a good deal depends on what an inspection costs — which is the ` +
+      `next slide.`
+    : `At <strong>${state.threshold.toFixed(2)}</strong> the model inspects ` +
+      `${fmtNum(current.flagged)} shipments and finds ${fmtNum(current.tp)} of the ` +
+      `${fmtNum(claims)} real claims. Move the slider to trade one against the other; ` +
+      `the next slide prices the trade.`;
 }
 
+/* ----------------------------------------------- page 8 · cost-benefit -- */
+function renderCostControls() {
+  const d = state.boot.cost_defaults;
+  state.cost = d.cost_per_flagged;
+  state.effectiveness = d.effectiveness;
+
+  const cost = $('cost-slider');
+  cost.min = d.cost_min; cost.max = d.cost_max;
+  cost.step = d.cost_step; cost.value = state.cost;
+  $('cost-out').textContent = fmtRs(state.cost);
+
+  const eff = $('eff-slider');
+  eff.min = d.effectiveness_min; eff.max = d.effectiveness_max;
+  eff.step = d.effectiveness_step; eff.value = state.effectiveness;
+  $('eff-out').textContent = fmtPct(state.effectiveness, 0);
+
+  $('cost-rationale').textContent = d.rationale;
+
+  cost.addEventListener('input', () => {
+    state.cost = parseFloat(cost.value);
+    $('cost-out').textContent = fmtRs(state.cost);
+    scheduleCost();
+  });
+  eff.addEventListener('input', () => {
+    state.effectiveness = parseFloat(eff.value);
+    $('eff-out').textContent = fmtPct(state.effectiveness, 0);
+    scheduleCost();
+  });
+  $('adopt-optimal').addEventListener('click', () => {
+    if (state.costResult) setThreshold(state.costResult.curve.optimal_threshold);
+  });
+}
+
+async function refreshCost() {
+  const token = ticket('cost');
+  const data = await api(`/api/cost-benefit?model=${state.thrModel}` +
+    `&cost=${state.cost}&effectiveness=${state.effectiveness}` +
+    `&threshold=${state.threshold}`);
+  if (!isCurrent('cost', token)) return;
+  state.costResult = data;
+
+  const c = data.curve;
+  $('cost-opt-t').textContent = c.optimal_threshold.toFixed(2);
+  $('cost-opt-sub').textContent = c.optimal_flagged
+    ? `inspect ${fmtNum(c.optimal_flagged)} of ${fmtNum(data.n)} shipments ` +
+      `(${fmtPct(c.optimal_flagged_pct, 1)}) — you inspect ` +
+      `${fmtPct(data.current_flagged_pct, 1)} today`
+    : 'at this price, inspecting nothing is cheapest';
+
+  $('cost-nothing').textContent = fmtRs(c.do_nothing_cost);
+  $('cost-current').textContent = fmtRs(data.current_cost);
+  $('cost-best').textContent = fmtRs(c.optimal_cost);
+  $('cost-saving').textContent =
+    `${fmtRs(c.saving_vs_do_nothing)} (${fmtPct(c.saving_pct, 1)})`;
+  $('cost-excess').textContent = data.current_excess > 1
+    ? `${fmtRs(data.current_excess)} at ${data.current_threshold.toFixed(2)}`
+    : 'nothing — you are at the optimum';
+
+  $('cost-formula').innerHTML =
+    `act when&nbsp; ε × p × L &gt; C &nbsp;⟹&nbsp; t* = C / (ε × L) = ` +
+    `<strong>${data.closed_form_threshold.toFixed(2)}</strong>`;
+  $('cost-formula-note').textContent =
+    `With C = ${fmtRs(data.cost_per_flagged)}, ε = ${fmtPct(data.effectiveness, 0)} and an ` +
+    `average claim of ${fmtRs(data.mean_claim)}, the textbook formula gives ` +
+    `${data.closed_form_threshold.toFixed(2)} and the backtest above bottoms out at ` +
+    `${c.optimal_threshold.toFixed(2)}. Theory and the data agree.`;
+
+  const el = data.expected_loss_rule;
+  $('el-win').textContent = data.el_wins
+    ? `${fmtPct(data.el_improvement_pct, 1)} cheaper` : 'no gain here';
+  $('el-win').className = 'pill ' + (data.el_wins ? 'ok' : 'plain');
+  $('el-explain').innerHTML = data.el_wins
+    ? `A single probability cut-off treats every claim as costing the same. Ranking by ` +
+      `<strong>probability × predicted claim value</strong> instead inspects ` +
+      `${fmtNum(el.flagged)} shipments (${fmtPct(el.flagged_pct, 1)}) and saves a further ` +
+      `<strong>${fmtRs(data.el_improvement)}</strong>. A 10% chance of a ₹1,00,000 claim ` +
+      `outranks a 30% chance of a ₹2,000 one, and only this rule knows that.`
+    : `At this price the expected-loss rule inspects ${fmtNum(el.flagged)} shipments and ` +
+      `does not beat the best single threshold. Lower the intervention cost and it pulls ahead.`;
+
+  Charts.costCurve(data);
+  Charts.costComparison(data);
+}
+
+/* ------------------------------------------ page 10 · model comparison -- */
 /* ------------------------------------------- page 9 · model comparison -- */
 function renderComparison() {
   const models = state.boot.classification;
@@ -666,7 +877,7 @@ function renderComparison() {
     const m = models[key].metrics;
     const on = key === best;
     return `<tr style="${on ? 'background:var(--accent-soft)' : ''}">
-      <td><span class="swatch" style="background:${Charts.CAT[i % Charts.CAT.length]}"></span>
+      <td><span class="swatch" style="background:${Charts.catVar(i)}"></span>
         ${models[key].name}${on ? ' <span class="pill">best PR-AUC</span>' : ''}</td>
       <td class="num">${fmtPct(m.accuracy)}</td>
       <td class="num">${fmtPct(m.precision)}</td>
@@ -835,6 +1046,7 @@ async function refreshDecision() {
 
 /* ---------------------------------------------------------- scheduling -- */
 const scheduleThreshold = debounce(() => refreshThreshold().catch(fail), 70);
+const scheduleCost = debounce(() => refreshCost().catch(fail), 70);
 const scheduleWhatIf = debounce(() => refreshWhatIf().catch(fail), 90);
 const scheduleScenarioRefresh = debounce(() => {
   Promise.all([refreshPrediction(), refreshWhatIf(), refreshDecision()]).catch(fail);
@@ -857,11 +1069,13 @@ async function boot() {
   state.regModel = state.boot.best_regressor;
   resetShipment();
 
+  buildPresenterControls();
   buildNav();
   renderDataPage();
   renderEdaControls();
   renderClusterControls();
   renderThresholdControls();
+  renderCostControls();
   renderComparison();
   renderRegressionPage();
   renderDriverControls();
@@ -880,7 +1094,8 @@ async function boot() {
     scheduleWhatIf();
   });
 
-  await Promise.all([refreshEda(), refreshClusters(), refreshThreshold(), refreshWhatIf()]);
+  await Promise.all([refreshEda(), refreshClusters(), refreshThreshold(),
+                     refreshCost(), refreshWhatIf()]);
 
   $('loading').classList.add('hidden');
   const start = parseInt(location.hash.replace('#', ''), 10);

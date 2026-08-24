@@ -136,7 +136,8 @@ def cluster_lanes(lanes: pd.DataFrame, k_values=range(2, 7)) -> dict:
     X = lanes[LANE_FEATURES].astype(float).copy()
     for col in LOG_SCALED:
         X[col] = np.log1p(X[col])
-    Z = StandardScaler().fit_transform(X.to_numpy(dtype=float))
+    scaler = StandardScaler().fit(X.to_numpy(dtype=float))
+    Z = scaler.transform(X.to_numpy(dtype=float))
 
     solutions, elbow = {}, []
     for k in k_values:
@@ -145,12 +146,28 @@ def cluster_lanes(lanes: pd.DataFrame, k_values=range(2, 7)) -> dict:
         sil = float(silhouette_score(Z, labels)) if k > 1 else float("nan")
         elbow.append({"k": int(k), "inertia": float(km.inertia_), "silhouette": sil})
 
-        # Cluster profile in standardised units, used only for naming.
+        # Cluster profile in standardised units, used for naming and for the
+        # profile heatmap that explains what separates clusters in the seven
+        # dimensions the scatter plot cannot show.
         profiles = []
         for c in range(k):
             mask = labels == c
             profiles.append({f: float(Z[mask, i].mean())
                              for i, f in enumerate(LANE_FEATURES)})
+
+        # The fitted centres, returned to original units so they can be drawn on
+        # the same axes as the lanes themselves. This is the real centroid, not
+        # the mean of the member lanes.
+        centres = scaler.inverse_transform(km.cluster_centers_)
+        centroids = []
+        for c in range(k):
+            row = {}
+            for i, feature in enumerate(LANE_FEATURES):
+                value = float(centres[c, i])
+                if feature in LOG_SCALED:
+                    value = float(np.expm1(value))
+                row[feature] = value
+            centroids.append(row)
         names = _dedupe([_archetype_name(p) for p in profiles], profiles)
 
         # Present clusters ordered by expected loss, so cluster 0 is always the
@@ -181,6 +198,7 @@ def cluster_lanes(lanes: pd.DataFrame, k_values=range(2, 7)) -> dict:
                 "avg_route_complexity": float(sub["avg_route_complexity"].mean()),
                 "avg_handling_touchpoints": float(sub["avg_handling_touchpoints"].mean()),
                 "profile_z": profiles[raw_order[c]],
+                "centroid": centroids[raw_order[c]],
                 "example_lanes": sub.nlargest(3, "shipments")["lane_id"].tolist(),
             })
 
@@ -237,12 +255,11 @@ def _interpret(summary: list[dict], silhouette: float) -> str:
               if calm["expected_loss_per_shipment"] > 0 else float("inf"))
     spread_txt = (f"{spread:.1f}x" if np.isfinite(spread) else "many times")
     return (
-        f"With K={len(summary)} the lane network splits into groups whose expected loss "
-        f"per shipment differs by about {spread_txt}. The calmest group "
-        f"(\"{calm['archetype']}\", {calm['lane_count']} lanes) runs a "
-        f"{calm['claim_rate']*100:.1f}% claim rate at an average claim of "
-        f"₹{calm['avg_claim_value']:,.0f}, while the most exposed group "
-        f"(\"{worst['archetype']}\", {worst['lane_count']} lanes) runs "
-        f"{worst['claim_rate']*100:.1f}% at ₹{worst['avg_claim_value']:,.0f}. "
-        f"Silhouette score {silhouette:.3f}."
+        f"K={len(summary)} splits the network into groups whose expected loss per "
+        f"shipment differs by {spread_txt}. Calmest: \"{calm['archetype']}\" "
+        f"({calm['lane_count']} lanes, {calm['claim_rate']*100:.1f}% claim rate, "
+        f"₹{calm['avg_claim_value']:,.0f} average claim). Most exposed: "
+        f"\"{worst['archetype']}\" ({worst['lane_count']} lanes, "
+        f"{worst['claim_rate']*100:.1f}%, ₹{worst['avg_claim_value']:,.0f}). "
+        f"Silhouette {silhouette:.3f}."
     )

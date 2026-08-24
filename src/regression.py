@@ -6,6 +6,13 @@ claim_amount_rs is undefined for the rest - it is not zero, it simply does not
 exist. The model therefore answers a conditional question, and it is multiplied
 by the claim probability afterwards to give an expected loss.
 
+The train/test split is *nested inside* the classifier's split: these models see
+only claims that fall in the classifier's training set, and are scored on claims
+in the classifier's test set. That costs a little accuracy compared with drawing
+a fresh split over all claims, but it is what makes the cost analysis on slide 8
+honest - there, the two models are combined over the classifier's test set, and
+the value model must not have seen those rows.
+
 Both models predict the claim amount directly in rupees. A log-transformed
 target was tested first and fits the *shape* of the distribution better
 (log-scale R2 around 0.37), but converting those predictions back to rupees -

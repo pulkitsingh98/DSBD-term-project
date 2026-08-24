@@ -20,6 +20,7 @@ import joblib
 import numpy as np
 from flask import Flask, jsonify, render_template, request
 
+from src import cost_benefit as cb
 from src.classification import confusion_at
 from src.preprocessing import (BASE_DIR, MODELS_DIR, TARGET_CLS, load_raw,
                                to_frame)
@@ -80,6 +81,11 @@ class ModelStore:
         blob = np.load(PROBS_PATH)
         self.y_test = blob["y_test"]
         self.eval_probs = {k: blob[f"p_{k}"] for k in CLASSIFIER_KEYS}
+        # What each held-out shipment actually cost, and what the value model
+        # would have quoted for it. The cost analysis backtests against these.
+        self.claim_amount_test = blob["claim_amount_test"]
+        self.pred_value_test = blob["pred_value_test"]
+        self.mean_claim = float(self.claim_amount_test[self.y_test == 1].mean())
 
         self.best_classifier = self.art["best_classifier"]
         self.best_regressor = self.art["best_regressor"]
@@ -292,9 +298,11 @@ def api_bootstrap():
                      "default_k": art["clusters"]["default_k"],
                      "elbow_k": art["clusters"]["elbow_k"],
                      "best_k_silhouette": art["clusters"]["best_k_silhouette"],
+                     "features": art["clusters"]["features"],
                      "feature_labels": art["clusters"]["feature_labels"],
                      "n_lanes": len(art["clusters"]["lanes"])},
         "controls": art["controls"],
+        "cost_defaults": art["cost_defaults"],
         "baseline": art["baseline"],
         "carriers": art["carriers"],
     })
@@ -622,6 +630,56 @@ def api_decision():
         "classifier_name": primary["classifier_name"],
         "regressor_name": primary["regressor_name"],
     })
+
+
+@app.route("/api/cost-benefit")
+def api_cost_benefit():
+    """
+    Which threshold is cheapest, given what an intervention costs.
+
+    Pure numpy over the stored evaluation arrays - no model is called, so this
+    stays instant while a slider is being dragged. The two inputs are business
+    assumptions, not data: `cost` is what acting on a flagged shipment costs, and
+    `effectiveness` is the share of the damage that acting prevents.
+    """
+    model = request.args.get("model", STORE.best_classifier)
+    if model not in STORE.eval_probs:
+        return jsonify({"error": f"unknown model '{model}'"}), 400
+    try:
+        cost = float(request.args.get("cost", STORE.art["cost_defaults"]["cost_per_flagged"]))
+        effectiveness = float(request.args.get(
+            "effectiveness", STORE.art["cost_defaults"]["effectiveness"]))
+    except ValueError:
+        return jsonify({"error": "cost and effectiveness must be numbers"}), 400
+
+    cost = max(cost, 0.0)
+    effectiveness = min(max(effectiveness, 0.0), 1.0)
+
+    probs = STORE.eval_probs[model]
+    result = cb.compare(STORE.y_test, STORE.claim_amount_test, probs,
+                        STORE.pred_value_test, cost, effectiveness)
+
+    # Where the currently selected threshold sits on that same cost curve, so the
+    # page can show what the present policy costs against the best available one.
+    current = float(request.args.get("threshold", 0.5))
+    current_cost = cb.total_cost(probs >= current, STORE.y_test,
+                                 STORE.claim_amount_test, cost, effectiveness)
+
+    result.update({
+        "model": model,
+        "model_name": STORE.art["classification"][model]["name"],
+        "cost_per_flagged": cost,
+        "effectiveness": effectiveness,
+        "mean_claim": STORE.mean_claim,
+        "closed_form_threshold": cb.closed_form_threshold(
+            cost, effectiveness, STORE.mean_claim),
+        "current_threshold": current,
+        "current_cost": current_cost,
+        "current_flagged_pct": float((probs >= current).mean()),
+        "current_excess": current_cost - result["curve"]["optimal_cost"],
+        "n": int(len(STORE.y_test)),
+    })
+    return jsonify(result)
 
 
 @app.route("/api/health")
