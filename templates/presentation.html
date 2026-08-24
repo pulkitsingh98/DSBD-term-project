@@ -182,19 +182,10 @@
 
     <div class="slide-body">
       <div class="grid g-60-40 fill">
-        <div style="display:flex;flex-direction:column;gap:.7rem;min-height:0">
-          <div class="card flush" style="flex:2.1 1 0;min-height:0">
-            <p class="card-title" style="padding:0 .3rem">Lane risk archetypes
-              <span class="muted" id="cluster-axes">✕ marks each cluster centre · dot size = shipment volume</span></p>
-            <div id="chart-clusters" class="chart"></div>
-          </div>
-          <div class="card flush" style="flex:1 1 0;min-height:6rem">
-            <p class="card-title" style="padding:0 .3rem">
-              <span>What separates the clusters
-                <span class="gloss">all 9 clustering features, in SDs from the average lane</span></span>
-            </p>
-            <div id="chart-cluster-profile" class="chart"></div>
-          </div>
+        <div class="card flush">
+          <p class="card-title" style="padding:0 .3rem">Lane risk archetypes
+            <span class="muted" id="cluster-axes">✕ marks each cluster centre · dot size = shipment volume</span></p>
+          <div id="chart-clusters" class="chart"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:.7rem;min-height:0">
@@ -235,7 +226,7 @@
             </div>
           </div>
 
-          <div class="card flush" style="flex:0 1 10.5rem;min-height:6rem">
+          <div class="card flush" style="flex:0 1 9rem;min-height:5.5rem">
             <p class="card-title" style="padding:0 .3rem">Choosing K
               <span class="muted" id="k-choice-note"></span></p>
             <div id="chart-elbow" class="chart"></div>

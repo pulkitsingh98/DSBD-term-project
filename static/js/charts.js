@@ -363,6 +363,12 @@ function clusterScatter(points, summary) {
  * The scatter can only show 2 of the 9 features K-Means used, which is why the
  * colours look intermingled. This shows all nine at once as standardised
  * deviations from the average lane, so the overlap stops being a mystery.
+ *
+ * NOT CURRENTLY ON THE DECK. Removed from slide 4 because it needs more
+ * explaining than it earns in a live presentation. Everything it needs is still
+ * computed and served (`profile_z` per cluster), so putting it back is two
+ * steps: add `<div id="chart-cluster-profile" class="chart">` inside a card on
+ * slide 4, and call this from refreshClusters() in presentation.js.
  */
 function clusterHeatmap(summary, features, labels) {
   render('chart-cluster-profile', () => {
