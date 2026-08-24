@@ -335,8 +335,6 @@ async function refreshClusters() {
     </tr>`).join('');
 
   Charts.clusterScatter(data.points, data.summary);
-  Charts.clusterHeatmap(data.summary, state.boot.clusters.features,
-                        state.boot.clusters.feature_labels);
   Charts.elbowChart(data.elbow, state.k);
   scheduleScenarioRefresh();
 }

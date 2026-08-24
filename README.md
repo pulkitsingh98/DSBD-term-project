@@ -41,7 +41,7 @@ package on first start, so the presentation works with no internet connection.
 | 1 | Problem statement | — |
 | 2 | Data → business variables | — |
 | 3 | Exploratory analysis | Variable dropdowns redraw two charts and regenerate the observations |
-| 4 | Lane risk archetypes | K slider (2–6) re-clusters, renames, rescores; centroids and a 9-feature profile heatmap |
+| 4 | Lane risk archetypes | K slider (2–6) re-clusters, renames, rescores; ✕ marks each fitted centroid |
 | 5 | Claim probability | 17 shipment controls re-score three classifiers live |
 | 6 | Threshold simulator | Threshold slider moves the operating point on fixed ROC / PR curves |
 | 7 | Why the threshold matters | Three-column comparison anchored on the current threshold |
@@ -193,11 +193,13 @@ its own standardised profile — claim frequency, claim size, operating
 difficulty, volume — so the labels describe whatever the algorithm actually
 found at that K. Changing K changes the names.
 
-**The lane scatter shows 2 of the 9 features K-Means clustered on**, which is why
-the colours intermingle. Rather than leave that looking like a failure, the ✕
-markers give each fitted centroid in original units and the heatmap underneath
-shows all nine features as standard deviations from the average lane — so the
-overlap has an explanation on the slide instead of in the presenter's head.
+**The lane scatter shows 2 of the 9 features K-Means clustered on** — claim rate
+and average claim value — which is why the colours intermingle: two dots close
+together on screen can be far apart in the other seven dimensions. The ✕ markers
+give each fitted centroid in original units. A heatmap of all nine features per
+cluster is built and ready in `clusterHeatmap()` (`static/js/charts.js`) but is
+deliberately not mounted: it needs more explaining than it earns in a live
+presentation. The comment above that function says how to put it back.
 
 **"Model-implied" is not "causal".** The what-if page and the lever
 recommendation on the final slide report what the fitted models predict if an
