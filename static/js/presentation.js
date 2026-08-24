@@ -961,9 +961,10 @@ function renderDrivers() {
            'Direction is on the model-comparison page.';
   } else {
     rows = state.boot.importances[state.impModel].slice(0, 10);
-    note = `${state.impModel === 'bagging' ? 'Bagging' : 'Random Forest'}: mean impurity ` +
-           'decrease, summed back from one-hot columns to the original variable. Importance ' +
-           'measures how much a variable is used, not the direction of its effect.';
+    note = `${state.impModel === 'bagging' ? 'Bagging' : 'Random Forest'}: share of the ` +
+           'useful splitting each variable accounts for, added up across every tree and ' +
+           'folded back from one-hot columns into the parent variable. This measures how ' +
+           'much a variable is used — not how strongly it acts, and not the direction.';
   }
   const max = rows[0] ? rows[0].importance : 1;
   $('driver-bars').innerHTML = rows.map((r) => `
